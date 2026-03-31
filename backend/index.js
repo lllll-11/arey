@@ -15,6 +15,15 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+
+// Servir manifest.json y sw.js en la raíz
+app.get('/manifest.json', (req, res) => {
+  res.sendFile(path.join(__dirname, 'manifest.json'));
+});
+app.get('/sw.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'sw.js'));
+});
+
 // Servir frontend
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
