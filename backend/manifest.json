@@ -1,6 +1,6 @@
 {
-  "name": "Luna - Asistente IA",
-  "short_name": "Luna IA",
+  "name": "arey - Asistente IA",
+  "short_name": "arey IA",
   "description": "Tu asistente virtual con inteligencia artificial",
   "start_url": "/",
   "display": "standalone",
