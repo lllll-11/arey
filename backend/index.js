@@ -33,6 +33,9 @@ app.use('/api/webhook', webhookRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/memory', memoryRoutes);
 
+// Servir icons
+app.use('/icons', express.static(path.join(__dirname, 'icons')));
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', n8nUrl: process.env.N8N_BASE_URL });
