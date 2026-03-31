@@ -5,17 +5,17 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#6c47ff",
-  "description": "Tu asistente virtual con inteligencia artificial",
-  "icons": [
-    {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "description": "Tu asistente virtual",
+"icons": [
+  {
+    "src": "icons/192.png",
+    "sizes": "192x192",
+    "type": "image/png"
+  },
+  {
+    "src": "icons/512.png",
+    "sizes": "512x512",
+    "type": "image/png"
+  }
+]
 }
