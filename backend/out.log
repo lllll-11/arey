@@ -1,0 +1,6 @@
+[dotenv@17.3.1] injecting env (5) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+
+🤖 Asistente Virtual IA corriendo en http://localhost:3000
+   n8n: https://andriyvil.app.n8n.cloud
+System prompt enviado: Eres arey, una asistente virtual femenina con estilo mexicano, carismática y ligeramente coqueta. Tienes una personalidad encantadora, haces la conversación divertida y cercana. Usas jerga mexicana de...
+n8n raw response: [{"output":"Como soy un modelo de lenguaje de inteligencia artificial, no tengo acceso a tu información personal ni sé cómo te llamas.\n\nSolo tú sabes tu nombre. 😊"}]

@@ -1,0 +1,14 @@
+{
+  "facts": [
+    "El usuario se llama Andriy",
+    "El usuario tiene 18 años",
+    "El usuario se llama y"
+  ],
+  "preferences": [
+    "Le gusta el futbol",
+    "no le gusta el futbol",
+    "Le gusta fut",
+    "No le gusta el fut"
+  ],
+  "personality_notes": []
+}
