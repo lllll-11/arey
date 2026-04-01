@@ -724,12 +724,21 @@ async function connectDiscord(baseUrl) {
 
 async function initDiscord(baseUrl) {
   bridgeBaseUrl = baseUrl;
+  const { botToken, clientId } = getCredentials();
+  console.log(`[discord] initDiscord llamado. baseUrl=${baseUrl}`);
+  console.log(`[discord] botToken presente: ${Boolean(botToken)} (${(botToken || '').length} chars)`);
+  console.log(`[discord] clientId presente: ${Boolean(clientId)} (${clientId || 'vacio'})`);
+  console.log(`[discord] isDiscordConfigured: ${isDiscordConfigured()}`);
   if (isDiscordConfigured()) {
     try {
+      console.log('[discord] Intentando conectar a Discord...');
       await connectDiscord(baseUrl);
+      console.log('[discord] Discord conectado exitosamente!');
     } catch (error) {
-      console.error('No se pudo iniciar Discord automaticamente:', error.message);
+      console.error('[discord] No se pudo iniciar Discord automaticamente:', error.message);
     }
+  } else {
+    console.log('[discord] Discord NO configurado - falta botToken o clientId');
   }
 }
 
