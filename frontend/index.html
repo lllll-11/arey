@@ -373,7 +373,7 @@
   </div>
 
   <script>
-    const API_URL = 'http://localhost:3000/api/chat';
+    const API_URL = '/api/chat';
     const SESSION_ID = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
 
     // ===== ELEMENTS =====
@@ -645,7 +645,7 @@
       visualizer.classList.add('active');
 
       try {
-        const res = await fetch('http://localhost:3000/api/chat/tts', {
+        const res = await fetch('/api/chat/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text }),
