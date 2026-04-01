@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Arey</title>
   <meta name="description" content="Arey — tu asistente virtual con inteligencia artificial">
   <meta name="theme-color" content="#0b0b0b">
@@ -31,14 +31,21 @@
       --danger: #b91c1c;
     }
 
+    html, body {
+      height: 100%;
+      height: 100dvh;
+    }
+
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       background: radial-gradient(circle at top, #151515 0%, var(--bg) 45%);
       color: var(--text);
-      height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      position: fixed;
+      width: 100%;
+      top: 0; left: 0;
     }
 
     /* ── HEADER ── */
@@ -51,6 +58,7 @@
       border-bottom: 1px solid var(--line);
       backdrop-filter: blur(10px);
       z-index: 10;
+      flex-shrink: 0;
     }
 
     .header .avatar {
@@ -163,9 +171,11 @@
 
     /* ── CHAT ── */
     .chat-container {
-      flex: 1; overflow-y: auto; padding: 16px 20px;
+      flex: 1 1 0%; overflow-y: auto; padding: 16px 20px;
       display: flex; flex-direction: column; gap: 12px;
       scroll-behavior: smooth;
+      min-height: 0;
+      -webkit-overflow-scrolling: touch;
     }
 
     .message {
@@ -226,6 +236,7 @@
       background: #161616; border: 1px solid var(--line);
       border-radius: 14px; border-bottom-left-radius: 4px;
       display: none; gap: 4px; align-items: center;
+      flex-shrink: 0;
     }
     .typing.active { display: flex; }
     .typing span {
@@ -242,9 +253,11 @@
     /* ── INPUT ── */
     .input-area {
       padding: 12px 16px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
       background: rgba(10, 10, 10, 0.92);
       border-top: 1px solid var(--line);
       display: flex; gap: 8px; align-items: center;
+      flex-shrink: 0;
     }
     .input-area input[type="text"] {
       flex: 1; padding: 10px 14px; background: #101010;
@@ -278,6 +291,7 @@
       font-size: 11px; color: #d1d5db;
       display: none; align-items: center; gap: 6px;
       width: fit-content;
+      flex-shrink: 0;
     }
     .image-chip.active { display: inline-flex; }
     .image-chip button { border: none; background: transparent; color: #9ca3af; cursor: pointer; font-size: 13px; }
@@ -340,11 +354,33 @@
     .chat-container::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
 
     @media (max-width: 600px) {
-      .message { max-width: 90%; }
-      .header { padding: 10px 14px; }
+      .message { max-width: 90%; font-size: 14px; }
+      .header { padding: 8px 10px; gap: 8px; }
+      .header .avatar { width: 32px; height: 32px; font-size: 12px; }
+      .header .info h1 { font-size: 14px; }
+      .header-actions { gap: 2px; }
+      .mode-toggle button { padding: 5px 10px; font-size: 11px; }
+      .icon-btn { width: 32px; height: 32px; font-size: 14px; }
+      .chat-container { padding: 12px 10px; gap: 8px; }
+      .input-area { padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); gap: 6px; }
+      .input-area input[type="text"] { padding: 9px 12px; font-size: 14px; }
+      .send-btn { padding: 9px 14px; font-size: 12px; }
+      .attach-btn { width: 34px; height: 34px; font-size: 16px; flex-shrink: 0; }
       .settings-panel { width: 100%; right: -100%; }
       .sidebar { width: 260px; left: -260px; }
+      .call-view { padding: 20px; gap: 14px; }
+      .call-avatar { width: 90px; height: 90px; font-size: 18px; }
+      .call-btn { width: 56px; height: 56px; }
+      .call-btn.call-start { width: 70px; height: 70px; }
     }
+
+    /* Keyboard open state */
+    body.keyboard-open .header .mode-toggle { display: none; }
+    body.keyboard-open .header .icon-btn { display: none; }
+    body.keyboard-open .header { padding: 6px 10px; }
+    body.keyboard-open .header .avatar { width: 28px; height: 28px; font-size: 11px; }
+    body.keyboard-open .header .info h1 { font-size: 13px; }
+    body.keyboard-open .header .info span { display: none; }
   </style>
 </head>
 <body>
@@ -990,6 +1026,31 @@
     }
 
     speechSynthesis.onvoiceschanged = function() { speechSynthesis.getVoices(); };
+
+    // ===== MOBILE VIEWPORT FIX =====
+    function setVH() {
+      var vh = window.innerHeight;
+      document.body.style.height = vh + 'px';
+    }
+    setVH();
+    window.addEventListener('resize', setVH);
+
+    // Detect virtual keyboard
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function() {
+        var vv = window.visualViewport;
+        document.body.style.height = vv.height + 'px';
+        var isKeyboard = vv.height < window.innerHeight * 0.75;
+        document.body.classList.toggle('keyboard-open', isKeyboard);
+        if (isKeyboard) scrollToBottom();
+      });
+    }
+
+    // Prevent iOS bounce scroll
+    document.body.addEventListener('touchmove', function(e) {
+      if (e.target.closest('.chat-container, .session-list, .settings-panel, .memoriesDisplay')) return;
+      if (!e.target.closest('.input-area')) e.preventDefault();
+    }, { passive: false });
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
   </script>
