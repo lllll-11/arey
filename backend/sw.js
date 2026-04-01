@@ -1,4 +1,4 @@
-const CACHE_NAME = 'luna-ia-v1';
+const CACHE_NAME = 'luna-ia-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -23,13 +23,37 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  // API calls: network only
-  if (request.url.includes('/api/')) {
+  const url = new URL(request.url);
+
+  // API calls: always network
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request));
     return;
   }
+
+  // HTML documents: network first, fallback to cache
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
   // Static assets: cache first, fallback to network
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        return response;
+      });
+    })
   );
 });
