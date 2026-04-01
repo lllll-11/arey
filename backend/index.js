@@ -47,7 +47,10 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🤖 Asistente Virtual IA corriendo en http://localhost:${PORT}`);
+  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : `http://localhost:${PORT}`;
+  console.log(`\n🤖 Asistente Virtual IA corriendo en ${baseUrl}`);
   console.log(`   n8n: ${process.env.N8N_BASE_URL}`);
-  discordService.initDiscord(`http://localhost:${PORT}`);
+  discordService.initDiscord(baseUrl);
 });
