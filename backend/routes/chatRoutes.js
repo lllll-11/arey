@@ -81,13 +81,13 @@ function writeConversations(data) {
   fs.writeFileSync(CONVERSATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-function clipText(text, maxLen = 450) {
+function clipText(text, maxLen = 800) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
   if (value.length <= maxLen) return value;
   return `${value.slice(0, maxLen)}...`;
 }
 
-function loadConversationContext(sessionId, maxTurns = 10) {
+function loadConversationContext(sessionId, maxTurns = 20) {
   const sid = String(sessionId || 'default');
   const db = readConversations();
   const turns = Array.isArray(db.sessions?.[sid]) ? db.sessions[sid] : [];
@@ -107,8 +107,8 @@ function loadConversationContext(sessionId, maxTurns = 10) {
 
 function saveConversationTurn(sessionId, userText, assistantText) {
   const sid = String(sessionId || 'default');
-  const user = clipText(userText, 1200);
-  const assistant = clipText(assistantText, 1200);
+  const user = clipText(userText, 2000);
+  const assistant = clipText(assistantText, 2000);
   if (!user && !assistant) return;
 
   const db = readConversations();
@@ -1168,7 +1168,7 @@ router.post('/', async (req, res) => {
     const toneHint = userTone === 'strong'
       ? '\n\nAjuste de tono: el usuario esta hablando con jerga fuerte mexicana. Responde con estilo mas barrio y directo, puedes usar groserias leves/contextuales. Evita lenguaje discriminatorio o de odio.'
       : '\n\nAjuste de tono: usa tono casual, claro y natural.';
-    const conversationContext = loadConversationContext(sid, isCallMode ? 6 : 12);
+    const conversationContext = loadConversationContext(sid, isCallMode ? 8 : 25);
     const selfRulesPrompt = loadSelfRulesPrompt(sid);
     const mexicoTime = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'full', timeStyle: 'short' });
     const timeHint = `\n\nFecha y hora actual en México: ${mexicoTime}.`;

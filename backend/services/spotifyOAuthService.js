@@ -20,7 +20,12 @@ function writeIntegrations(data) {
 }
 
 function getRedirectUri() {
-  return process.env.SPOTIFY_REDIRECT_URI || 'http://localhost:3000/api/integrations/spotify/callback';
+  if (process.env.SPOTIFY_REDIRECT_URI) return process.env.SPOTIFY_REDIRECT_URI;
+  const renderUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderUrl) return `${renderUrl}/api/integrations/spotify/callback`;
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railwayDomain) return `https://${railwayDomain}/api/integrations/spotify/callback`;
+  return 'http://localhost:3000/api/integrations/spotify/callback';
 }
 
 function getCredentials() {
