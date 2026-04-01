@@ -63,7 +63,7 @@ function getSpotifyAuthUrl() {
   }
 
   const scope = process.env.SPOTIFY_SCOPE
-    || 'user-read-email user-read-private user-read-playback-state user-modify-playback-state';
+    || 'user-read-email user-read-private user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-recently-played user-top-read user-library-read user-library-modify playlist-read-private playlist-modify-public playlist-modify-private streaming';
 
   const params = new URLSearchParams({
     client_id: clientId,

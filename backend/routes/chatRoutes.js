@@ -8,6 +8,7 @@ const elevenLabsService = require('../services/elevenLabsService');
 const googleCalendarService = require('../services/googleCalendarService');
 const googleOAuthService = require('../services/googleOAuthService');
 const spotifyOAuthService = require('../services/spotifyOAuthService');
+const spotifyService = require('../services/spotifyService');
 const discordService = require('../services/discordService');
 
 const pendingCalendarActions = new Map();
@@ -500,6 +501,265 @@ function parseDiscordCredentialsIntent(text) {
   };
 }
 
+function parseSpotifyCommand(text) {
+  const n = normalizeText(text);
+
+  // Play / Pon / Reproduce
+  const playMatch = n.match(/^(?:pon(?:me|le)?|reproduce|play|toca|ponme)\s+(.+)/);
+  if (playMatch) {
+    const query = playMatch[1].replace(/\s+en\s+spotify$/i, '').trim();
+    // Detect type
+    let type = 'track';
+    if (/(playlist|lista)\s+/.test(n)) type = 'playlist';
+    else if (/(album|disco)\s+/.test(n)) type = 'album';
+    else if (/musica\s+de\s+|de\s+.+$/.test(n) && !n.includes(' cancion ')) type = 'artist';
+    return { action: 'play', query, type };
+  }
+
+  // Pause
+  if (/^(pausa|pausar|pause|para la musica|para la cancion|detener|deten)(\s|$)/.test(n)) {
+    return { action: 'pause' };
+  }
+
+  // Resume
+  if (/^(continua|continuar|resume|reanuda|reanudar|dale play|sigue)(\s+la)?\s*(musica|cancion|reproduccion)?$/.test(n)) {
+    return { action: 'resume' };
+  }
+
+  // Next
+  if (/^(siguiente|next|skip|salta|cambia(?:le)?|pasa(?:le)?)(\s+cancion|\s+tema|\s+track)?$/.test(n)) {
+    return { action: 'next' };
+  }
+
+  // Previous
+  if (/^(anterior|previous|prev|regresa|la\s+de\s+antes|la\s+anterior)(\s+cancion|\s+tema)?$/.test(n)) {
+    return { action: 'previous' };
+  }
+
+  // Volume
+  const volMatch = n.match(/^(?:volumen|volume|vol|sube(?:le)?|baja(?:le)?)\s*(?:a|al)?\s*(\d+)/);
+  if (volMatch) return { action: 'volume', volume: Number(volMatch[1]) };
+  if (/^sube(?:le)?\s*(?:el\s+)?(?:volumen|volume|vol)$/.test(n)) return { action: 'volume_up' };
+  if (/^baja(?:le)?\s*(?:el\s+)?(?:volumen|volume|vol)$/.test(n)) return { action: 'volume_down' };
+
+  // Shuffle
+  if (/^(aleatorio|shuffle|mezcla|random)(\s+on|\s+off)?$/.test(n)) {
+    const off = /off|desactiva/.test(n);
+    return { action: 'shuffle', state: !off };
+  }
+
+  // Repeat
+  if (/^(repetir|repeat|repite|loop)/.test(n)) {
+    if (/cancion|track|tema/.test(n)) return { action: 'repeat', state: 'track' };
+    if (/off|no|desactiva|quita/.test(n)) return { action: 'repeat', state: 'off' };
+    return { action: 'repeat', state: 'context' };
+  }
+
+  // Now playing
+  if (/^(que suena|que esta sonando|now playing|que cancion es|que se escucha|que escucho|que oigo|que cancion|que tema)/.test(n)) {
+    return { action: 'now_playing' };
+  }
+
+  // Queue
+  if (/^(cola|queue|fila|que sigue)$/.test(n)) {
+    return { action: 'queue' };
+  }
+  const queueMatch = n.match(/^(?:agrega|agregar|pon|add)\s+(?:a la cola|al queue|en cola)\s+(.+)/);
+  if (queueMatch) return { action: 'add_queue', query: queueMatch[1].trim() };
+  const queueMatch2 = n.match(/^(?:agrega|agregar|pon|add)\s+(.+?)\s+(?:a la cola|al queue|en cola)$/);
+  if (queueMatch2) return { action: 'add_queue', query: queueMatch2[1].trim() };
+
+  // Search
+  const searchMatch = n.match(/^busca(?:r|me)?\s+(?:en\s+spotify\s+)?(.+?)(?:\s+en\s+spotify)?$/);
+  if (searchMatch && /(spotify|cancion|artista|album|musica|track)/.test(n)) {
+    return { action: 'search', query: searchMatch[1].trim() };
+  }
+
+  // Top tracks
+  if (/^(?:mis|mi)\s+(?:top|canciones mas escuchadas|mas escuchad[oa]s)/.test(n)) {
+    return { action: 'top_tracks' };
+  }
+
+  // Top artists
+  if (/^(?:mis|mi)\s+(?:artistas favoritos|artistas mas escuchados|top artistas)/.test(n)) {
+    return { action: 'top_artists' };
+  }
+
+  // Recently played
+  if (/^(?:recientes|historial|lo que escuche|escuchado recientemente|recently played|que escuche)/.test(n)) {
+    return { action: 'recent' };
+  }
+
+  // Recommendations
+  if (/^(?:recomienda|recomendaciones|recomiendame|sugiere|sugerencias)(?:\s+(?:musica|canciones|algo))?/.test(n)) {
+    return { action: 'recommendations' };
+  }
+
+  // New releases
+  if (/^(?:novedades|lanzamientos|nuevo|nuevos lanzamientos|new releases|que hay nuevo)/.test(n)) {
+    return { action: 'new_releases' };
+  }
+
+  // My playlists
+  if (/^(?:mis playlists|mis listas|playlists)$/.test(n)) {
+    return { action: 'my_playlists' };
+  }
+
+  // Devices
+  if (/^(?:dispositivos|devices|donde suena|en que dispositivo)/.test(n)) {
+    return { action: 'devices' };
+  }
+
+  // Like
+  if (/^(?:like|me gusta|guardar?|dale like|likea)(?:\s+(?:esta|la|cancion))?$/.test(n)) {
+    return { action: 'like' };
+  }
+
+  // Profile
+  if (/^(?:mi perfil|perfil)\s*(?:de\s+)?spotify$/.test(n)) {
+    return { action: 'profile' };
+  }
+
+  return null;
+}
+
+async function handleSpotifyCommand(cmd) {
+  switch (cmd.action) {
+    case 'play': {
+      const result = await spotifyService.playBySearch(cmd.query, cmd.type || 'track');
+      if (!result.success) return result.error;
+      const what = result.track || result.playlist || result.album || result.artist || cmd.query;
+      return `Reproduciendo: ${what}`;
+    }
+    case 'pause': {
+      const r = await spotifyService.pause();
+      return r.success ? 'Musica pausada.' : r.error;
+    }
+    case 'resume': {
+      const r = await spotifyService.play();
+      return r.success ? 'Reproduccion reanudada.' : r.error;
+    }
+    case 'next': {
+      const r = await spotifyService.next();
+      if (!r.success) return r.error;
+      // Esperar un poco y mostrar la siguiente cancion
+      await new Promise(res => setTimeout(res, 500));
+      const now = await spotifyService.getNowPlaying();
+      return now.playing ? `Siguiente: ${now.track} - ${now.artists}` : 'Siguiente cancion.';
+    }
+    case 'previous': {
+      const r = await spotifyService.previous();
+      if (!r.success) return r.error;
+      await new Promise(res => setTimeout(res, 500));
+      const now = await spotifyService.getNowPlaying();
+      return now.playing ? `Anterior: ${now.track} - ${now.artists}` : 'Cancion anterior.';
+    }
+    case 'volume': {
+      const r = await spotifyService.setVolume(cmd.volume);
+      return r.success ? `Volumen al ${r.volume}%.` : r.error;
+    }
+    case 'volume_up': {
+      const now = await spotifyService.getNowPlaying();
+      const current = 50; // default if unknown
+      const r = await spotifyService.setVolume(Math.min(100, current + 15));
+      return r.success ? `Volumen subido a ${r.volume}%.` : r.error;
+    }
+    case 'volume_down': {
+      const r = await spotifyService.setVolume(35);
+      return r.success ? `Volumen bajado a ${r.volume}%.` : r.error;
+    }
+    case 'shuffle': {
+      const r = await spotifyService.setShuffle(cmd.state);
+      return r.success ? `Aleatorio ${r.state ? 'activado' : 'desactivado'}.` : r.error;
+    }
+    case 'repeat': {
+      const r = await spotifyService.setRepeat(cmd.state);
+      const labels = { track: 'cancion', context: 'playlist/album', off: 'desactivado' };
+      return r.success ? `Repetir: ${labels[r.state] || r.state}.` : r.error;
+    }
+    case 'now_playing': {
+      const np = await spotifyService.getNowPlaying();
+      return np.message;
+    }
+    case 'queue': {
+      const q = await spotifyService.getQueue();
+      return q.message;
+    }
+    case 'add_queue': {
+      const results = await spotifyService.search(cmd.query, 'track', 1);
+      if (!results.tracks?.length) return `No encontre "${cmd.query}" en Spotify.`;
+      const track = results.tracks[0];
+      const r = await spotifyService.addToQueue(track.uri);
+      return r.success ? `Agregado a la cola: ${track.name} - ${track.artists}` : r.error;
+    }
+    case 'search': {
+      const results = await spotifyService.search(cmd.query, 'track,artist,album', 5);
+      const lines = [];
+      if (results.tracks?.length) {
+        lines.push('Canciones:');
+        results.tracks.forEach(t => lines.push(`  ${t.position}. ${t.name} - ${t.artists} (${t.duration})`));
+      }
+      if (results.artists?.length) {
+        lines.push('Artistas:');
+        results.artists.forEach(a => lines.push(`  ${a.position}. ${a.name} - ${a.genres}`));
+      }
+      if (results.albums?.length) {
+        lines.push('Albums:');
+        results.albums.forEach(a => lines.push(`  ${a.position}. ${a.name} - ${a.artists} (${a.year})`));
+      }
+      return lines.length ? lines.join('\n') : `No encontre resultados para "${cmd.query}".`;
+    }
+    case 'top_tracks': {
+      const tracks = await spotifyService.getTopTracks('short_term', 10);
+      if (!tracks.length) return 'No tengo datos de tus canciones mas escuchadas aun.';
+      return 'Tus canciones mas escuchadas:\n' + tracks.map(t => `${t.position}. ${t.name} - ${t.artists}`).join('\n');
+    }
+    case 'top_artists': {
+      const artists = await spotifyService.getTopArtists('short_term', 10);
+      if (!artists.length) return 'No tengo datos de tus artistas mas escuchados aun.';
+      return 'Tus artistas mas escuchados:\n' + artists.map(a => `${a.position}. ${a.name} (${a.genres})`).join('\n');
+    }
+    case 'recent': {
+      const recent = await spotifyService.getRecentlyPlayed(10);
+      if (!recent.length) return 'No hay historial reciente.';
+      return 'Escuchaste recientemente:\n' + recent.map(t => `${t.position}. ${t.name} - ${t.artists}`).join('\n');
+    }
+    case 'recommendations': {
+      const recs = await spotifyService.getRecommendations([], [], [], 10);
+      if (!recs.length) return 'No pude generar recomendaciones en este momento.';
+      return 'Te recomiendo:\n' + recs.map(t => `${t.position}. ${t.name} - ${t.artists}`).join('\n');
+    }
+    case 'new_releases': {
+      const releases = await spotifyService.getNewReleases(10);
+      if (!releases.length) return 'No hay lanzamientos nuevos disponibles.';
+      return 'Nuevos lanzamientos:\n' + releases.map(a => `${a.position}. ${a.name} - ${a.artists} (${a.releaseDate})`).join('\n');
+    }
+    case 'my_playlists': {
+      const playlists = await spotifyService.getMyPlaylists(15);
+      if (!playlists.length) return 'No tienes playlists.';
+      return 'Tus playlists:\n' + playlists.map(p => `${p.position}. ${p.name} (${p.tracks} tracks)`).join('\n');
+    }
+    case 'devices': {
+      const devices = await spotifyService.getDevices();
+      if (!devices.length) return 'No hay dispositivos activos. Abre Spotify en tu cel o compu.';
+      return 'Dispositivos:\n' + devices.map(d => `- ${d.name} (${d.type}) ${d.active ? '← activo' : ''} vol: ${d.volume}%`).join('\n');
+    }
+    case 'like': {
+      const np = await spotifyService.getNowPlaying();
+      if (!np.playing || !np.uri) return 'No hay cancion sonando para dar like.';
+      const trackId = np.uri.split(':').pop();
+      await spotifyService.saveTracks([trackId]);
+      return `Le diste like a: ${np.track} - ${np.artists}`;
+    }
+    case 'profile': {
+      const p = await spotifyService.getProfile();
+      return `Perfil de Spotify:\nNombre: ${p.name}\nPlan: ${p.product}\nPais: ${p.country}\nSeguidores: ${p.followers}`;
+    }
+    default:
+      return null;
+  }
+}
+
 async function findClosestEvent({ date, time, summaryHint }) {
   if (!date || !time) return null;
 
@@ -878,6 +1138,28 @@ router.post('/', async (req, res) => {
     }
 
     const isCallMode = mode === 'call';
+
+    // ── Spotify commands via natural language ──
+    if (spotifyService.isConnected()) {
+      const spotifyCmd = parseSpotifyCommand(msg);
+      if (spotifyCmd) {
+        try {
+          const spotifyReply = await handleSpotifyCommand(spotifyCmd);
+          if (spotifyReply) {
+            saveConversationTurn(sid, msg, spotifyReply);
+            return res.json({ reply: spotifyReply, source: 'spotify' });
+          }
+        } catch (spotifyError) {
+          console.warn('Spotify command error:', spotifyError.message);
+          const errMsg = spotifyError.response?.data?.error?.message || spotifyError.message;
+          if (/premium|403/.test(String(errMsg).toLowerCase())) {
+            return res.json({ reply: 'Esa funcion requiere Spotify Premium.' });
+          }
+          return res.json({ reply: `Error de Spotify: ${errMsg}` });
+        }
+      }
+    }
+
     const memoryLimit = isCallMode ? 8 : 999;
     const callHint = isCallMode
       ? '\n\nModo llamada: responde con una sola frase corta y directa.'
