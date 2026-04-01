@@ -1633,4 +1633,91 @@ router.post('/tts', async (req, res) => {
   }
 });
 
+// POST /api/chat/quick - Endpoint optimizado para asistentes de voz (Siri, Tasker, etc.)
+router.post('/quick', async (req, res) => {
+  const { message, sessionId } = req.body;
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'Falta "message"' });
+  }
+  const msg = message.trim();
+  const sid = sessionId || 'siri-' + Date.now();
+
+  try {
+    // Spotify commands
+    const spotifyCmd = parseSpotifyCommand(msg);
+    if (spotifyCmd) {
+      const result = await handleSpotifyCommand(spotifyCmd);
+      return res.json({ reply: result });
+    }
+
+    // Todo commands
+    const todoResult = await handleTodoCommand(msg, sid);
+    if (todoResult) return res.json({ reply: todoResult });
+
+    // Weather
+    const weatherResult = await handleWeatherCommand(msg);
+    if (weatherResult) return res.json({ reply: weatherResult });
+
+    // Calendar quick check
+    const calendarPatterns = /(?:que tengo|mi agenda|mis eventos|calendario|citas?)\s*(?:hoy|mañana|manana|esta semana)?/i;
+    if (calendarPatterns.test(msg) && googleOAuthService.isConnected()) {
+      try {
+        const now = new Date();
+        const end = new Date(now);
+        end.setDate(end.getDate() + 1);
+        end.setHours(23, 59, 59, 999);
+        const events = await googleCalendarService.listEvents({
+          timeMin: now.toISOString(),
+          timeMax: end.toISOString(),
+          maxResults: 5,
+        });
+        if (events.length) {
+          const list = events.map(e => {
+            const t = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : 'todo el dia';
+            return `${t} - ${e.summary || 'Sin titulo'}`;
+          }).join('. ');
+          return res.json({ reply: 'Tus proximos eventos: ' + list });
+        } else {
+          return res.json({ reply: 'No tienes eventos proximos.' });
+        }
+      } catch {}
+    }
+
+    // General AI - with short-response instruction
+    const db = readConversations();
+    const turns = db.sessions?.[sid] || [];
+    const recentTurns = turns.slice(-6);
+    const historyMsgs = recentTurns.flatMap(t => {
+      const out = [];
+      if (t.user) out.push({ role: 'user', content: t.user });
+      if (t.assistant) out.push({ role: 'assistant', content: t.assistant });
+      return out;
+    });
+
+    const basePrompt = loadPersonality() + loadMemories(10) + loadSelfRulesPrompt(sid);
+    const systemPrompt = basePrompt + '\n\nIMPORTANTE: Esta es una peticion desde un asistente de voz (Siri/Google Assistant). Responde en MAXIMO 2-3 oraciones cortas y directas. No uses markdown, asteriscos, ni formato especial. Solo texto plano hablado. Ve directo al punto sin rodeos.';
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...historyMsgs,
+      { role: 'user', content: msg },
+    ];
+
+    const reply = await openRouterService.chat(messages);
+    const clean = reply.replace(/\*+/g, '').replace(/#{1,6}\s*/g, '').replace(/`{1,3}/g, '').trim();
+
+    // Save to conversation
+    if (!db.sessions) db.sessions = {};
+    if (!db.sessions[sid]) db.sessions[sid] = [];
+    db.sessions[sid].push({ user: msg, assistant: clean, at: new Date().toISOString() });
+    if (db.sessions[sid].length > 15) db.sessions[sid] = db.sessions[sid].slice(-15);
+    writeConversations(db);
+
+    return res.json({ reply: clean });
+  } catch (err) {
+    console.error('Quick endpoint error:', err.message);
+    return res.json({ reply: 'Hubo un error. Intenta de nuevo.' });
+  }
+});
+
 module.exports = router;
