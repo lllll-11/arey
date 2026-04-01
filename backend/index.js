@@ -47,10 +47,28 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-    : `http://localhost:${PORT}`;
+  const renderUrl = process.env.RENDER_EXTERNAL_URL;
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  const baseUrl = renderUrl
+    ? renderUrl
+    : railwayDomain
+      ? `https://${railwayDomain}`
+      : `http://localhost:${PORT}`;
   console.log(`\n🤖 Asistente Virtual IA corriendo en ${baseUrl}`);
   console.log(`   n8n: ${process.env.N8N_BASE_URL}`);
   discordService.initDiscord(baseUrl);
+
+  // ── Keep-alive: auto-ping cada 13 min para que Render no apague el servidor ──
+  if (renderUrl || railwayDomain) {
+    const pingUrl = `${baseUrl}/health`;
+    const INTERVAL = 13 * 60 * 1000; // 13 minutos
+    setInterval(() => {
+      require('https').get(pingUrl, (res) => {
+        console.log(`[keep-alive] ping ${res.statusCode}`);
+      }).on('error', (err) => {
+        console.log(`[keep-alive] error: ${err.message}`);
+      });
+    }, INTERVAL);
+    console.log(`   keep-alive: ping cada 13 min a ${pingUrl}`);
+  }
 });
