@@ -1,4 +1,4 @@
-const CACHE_NAME = 'luna-ia-v2';
+const CACHE_NAME = 'arey-v3';
 const ASSETS = [
   '/',
   '/index.html',

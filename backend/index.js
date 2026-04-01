@@ -10,6 +10,7 @@ const memoryRoutes = require('./routes/memoryRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const integrationRoutes = require('./routes/integrationRoutes');
 const discordService = require('./services/discordService');
+const { rateLimit } = require('./middleware/rateLimit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,9 +32,9 @@ app.get('/sw.js', (req, res) => {
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 // Rutas API
+app.use('/api/chat', rateLimit({ windowMs: 60000, max: 30 }), chatRoutes);
 app.use('/api/n8n', n8nRoutes);
 app.use('/api/webhook', webhookRoutes);
-app.use('/api/chat', chatRoutes);
 app.use('/api/memory', memoryRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/integrations', integrationRoutes);

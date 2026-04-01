@@ -659,13 +659,17 @@ async function handleSpotifyCommand(cmd) {
       return r.success ? `Volumen al ${r.volume}%.` : r.error;
     }
     case 'volume_up': {
-      const now = await spotifyService.getNowPlaying();
-      const current = 50; // default if unknown
+      const devices = await spotifyService.getDevices();
+      const active = devices.find(d => d.active);
+      const current = active?.volume ?? 50;
       const r = await spotifyService.setVolume(Math.min(100, current + 15));
       return r.success ? `Volumen subido a ${r.volume}%.` : r.error;
     }
     case 'volume_down': {
-      const r = await spotifyService.setVolume(35);
+      const devices = await spotifyService.getDevices();
+      const active = devices.find(d => d.active);
+      const current = active?.volume ?? 50;
+      const r = await spotifyService.setVolume(Math.max(0, current - 15));
       return r.success ? `Volumen bajado a ${r.volume}%.` : r.error;
     }
     case 'shuffle': {
@@ -757,6 +761,110 @@ async function handleSpotifyCommand(cmd) {
     }
     default:
       return null;
+  }
+}
+
+// ── Todo / Notes System ──
+const TODOS_FILE = path.join(__dirname, '..', 'todos.json');
+
+function readTodos() {
+  try {
+    if (!fs.existsSync(TODOS_FILE)) return { items: [] };
+    return JSON.parse(fs.readFileSync(TODOS_FILE, 'utf-8'));
+  } catch { return { items: [] }; }
+}
+
+function writeTodos(data) {
+  fs.writeFileSync(TODOS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function handleTodoCommand(msg, sid) {
+  const n = normalizeText(msg);
+
+  // Add todo
+  const addMatch = n.match(/^(?:recuerdame|recordar|apunta|anota|agrega tarea|tarea|nota|todo|pendiente|agregar?\s+(?:a\s+)?(?:la\s+)?(?:lista|pendientes))\s*:?\s+(.+)/);
+  if (addMatch) {
+    const db = readTodos();
+    db.items.push({
+      id: Date.now(),
+      text: addMatch[1].trim(),
+      done: false,
+      createdAt: new Date().toISOString(),
+      session: sid,
+    });
+    writeTodos(db);
+    return `Anotado: "${addMatch[1].trim()}"`;
+  }
+
+  // List todos
+  if (/^(?:mis tareas|mis pendientes|mi lista|todos|notas|que tengo pendiente|que tengo anotado|pendientes|lista)$/.test(n)) {
+    const db = readTodos();
+    const pending = db.items.filter(i => !i.done);
+    if (!pending.length) return 'No tienes pendientes. Todo limpio.';
+    return 'Tus pendientes:\n' + pending.map((t, i) => `${i + 1}. ${t.text}`).join('\n');
+  }
+
+  // Complete todo
+  const doneMatch = n.match(/^(?:listo|hecho|completar?|tacha|done)\s+(.+)/);
+  if (doneMatch) {
+    const db = readTodos();
+    const hint = doneMatch[1].trim().toLowerCase();
+    const idx = db.items.findIndex(i => !i.done && normalizeText(i.text).includes(hint));
+    if (idx >= 0) {
+      db.items[idx].done = true;
+      db.items[idx].completedAt = new Date().toISOString();
+      writeTodos(db);
+      return `Marcado como hecho: "${db.items[idx].text}"`;
+    }
+    return `No encontre un pendiente que coincida con "${hint}".`;
+  }
+
+  // Clear completed
+  if (/^(?:limpia|limpiar|borra)\s+(?:los\s+)?(?:completados|hechos|terminados)$/.test(n)) {
+    const db = readTodos();
+    db.items = db.items.filter(i => !i.done);
+    writeTodos(db);
+    return 'Listo, borre los pendientes completados.';
+  }
+
+  return null;
+}
+
+// ── Weather ──
+async function handleWeatherCommand(msg) {
+  const n = normalizeText(msg);
+  const weatherMatch = n.match(/^(?:clima|weather|temperatura|que clima|como esta el clima|pronostico|hace frio|hace calor|va a llover)\s*(?:en\s+)?(.*)$/);
+  if (!weatherMatch) return null;
+
+  const city = weatherMatch[1]?.trim() || 'Mexico City';
+  try {
+    const https = require('https');
+    const data = await new Promise((resolve, reject) => {
+      const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=es`;
+      https.get(url, (res) => {
+        let body = '';
+        res.on('data', c => body += c);
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        });
+      }).on('error', reject);
+    });
+
+    const current = data.current_condition?.[0];
+    if (!current) return `No pude obtener el clima de ${city}.`;
+
+    const temp = current.temp_C;
+    const feels = current.FeelsLikeC;
+    const desc = current.lang_es?.[0]?.value || current.weatherDesc?.[0]?.value || '';
+    const humidity = current.humidity;
+    const wind = current.windspeedKmph;
+    const forecast = data.weather?.[0];
+    const max = forecast?.maxtempC;
+    const min = forecast?.mintempC;
+
+    return `Clima en ${city}:\n🌡️ ${temp}°C (se siente ${feels}°C)\n☁️ ${desc}\n💧 Humedad: ${humidity}%\n💨 Viento: ${wind} km/h\n📊 Max: ${max}°C / Min: ${min}°C`;
+  } catch {
+    return `No pude obtener el clima de "${city}". Intenta con otra ciudad.`;
   }
 }
 
@@ -1160,6 +1268,20 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // ── Todo / Notes commands ──
+    const todoResult = await handleTodoCommand(msg, sid);
+    if (todoResult) {
+      saveConversationTurn(sid, msg, todoResult);
+      return res.json({ reply: todoResult, source: 'todo' });
+    }
+
+    // ── Weather commands ──
+    const weatherResult = await handleWeatherCommand(msg);
+    if (weatherResult) {
+      saveConversationTurn(sid, msg, weatherResult);
+      return res.json({ reply: weatherResult, source: 'weather' });
+    }
+
     const memoryLimit = isCallMode ? 8 : 999;
     const callHint = isCallMode
       ? '\n\nModo llamada: responde con una sola frase corta y directa.'
@@ -1316,6 +1438,174 @@ router.post('/', async (req, res) => {
       reply: 'Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.',
     });
   }
+});
+
+// POST /api/chat/stream - SSE streaming responses
+router.post('/stream', async (req, res) => {
+  const { message, sessionId, mode, imageDataUrl, imageUrl } = req.body;
+  const msg = (typeof message === 'string' ? message : '').trim();
+  const sid = sessionId || 'default';
+
+  if (!msg) return res.status(400).json({ error: 'Mensaje requerido' });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  try {
+    // Check Spotify commands first
+    if (spotifyService.isConnected()) {
+      const spotifyCmd = parseSpotifyCommand(msg);
+      if (spotifyCmd) {
+        const spotifyReply = await handleSpotifyCommand(spotifyCmd);
+        if (spotifyReply) {
+          saveConversationTurn(sid, msg, spotifyReply);
+          res.write(`data: ${JSON.stringify({ token: spotifyReply })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          return res.end();
+        }
+      }
+    }
+
+    // Check todo/notes/weather/calendar intents
+    const todoResult = await handleTodoCommand(msg, sid);
+    if (todoResult) {
+      saveConversationTurn(sid, msg, todoResult);
+      res.write(`data: ${JSON.stringify({ token: todoResult })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      return res.end();
+    }
+
+    const weatherResult = await handleWeatherCommand(msg);
+    if (weatherResult) {
+      saveConversationTurn(sid, msg, weatherResult);
+      res.write(`data: ${JSON.stringify({ token: weatherResult })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      return res.end();
+    }
+
+    const isCallMode = mode === 'call';
+    const memoryLimit = isCallMode ? 8 : 999;
+    const callHint = isCallMode ? '\n\nModo llamada: responde con una sola frase corta y directa.' : '';
+    const userTone = detectUserTone(msg);
+    const toneHint = userTone === 'strong'
+      ? '\n\nAjuste de tono: el usuario esta hablando con jerga fuerte mexicana. Responde con estilo mas barrio y directo, puedes usar groserias leves/contextuales. Evita lenguaje discriminatorio o de odio.'
+      : '\n\nAjuste de tono: usa tono casual, claro y natural.';
+    const conversationContext = loadConversationContext(sid, isCallMode ? 8 : 25);
+    const selfRulesPrompt = loadSelfRulesPrompt(sid);
+    const mexicoTime = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'full', timeStyle: 'short' });
+    const timeHint = `\n\nFecha y hora actual en México: ${mexicoTime}.`;
+    const systemPrompt = loadPersonality() + loadMemories(memoryLimit) + conversationContext + selfRulesPrompt + callHint + toneHint + timeHint;
+
+    const defaultBase = process.env.OPENROUTER_MODEL || 'qwen/qwen3-coder:free';
+    const chatModel = process.env.OPENROUTER_MODEL_CHAT || defaultBase;
+    const modelCandidates = uniqueModels([chatModel, ...parseModelList(process.env.OPENROUTER_MODELS_CHAT), defaultBase]);
+
+    let success = false;
+    let fullReply = '';
+    let lastErr = null;
+
+    for (const modelName of modelCandidates) {
+      try {
+        const { body, reqOptions } = openRouterService.chatStream(systemPrompt, msg, {
+          model: modelName,
+          maxTokens: Number(process.env.OPENROUTER_MAX_TOKENS_CHAT || 240),
+          temperature: 0.7,
+        });
+
+        await new Promise((resolve, reject) => {
+          const https = require('https');
+          const apiReq = https.request(reqOptions, (apiRes) => {
+            if (apiRes.statusCode !== 200) {
+              let errData = '';
+              apiRes.on('data', c => errData += c);
+              apiRes.on('end', () => reject(new Error(`HTTP ${apiRes.statusCode}: ${errData}`)));
+              return;
+            }
+            let buffer = '';
+            apiRes.on('data', (chunk) => {
+              buffer += chunk.toString();
+              const lines = buffer.split('\n');
+              buffer = lines.pop();
+              for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const payload = line.slice(6).trim();
+                if (payload === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(payload);
+                  const token = parsed.choices?.[0]?.delta?.content || '';
+                  if (token) {
+                    fullReply += token;
+                    res.write(`data: ${JSON.stringify({ token })}\n\n`);
+                  }
+                } catch {}
+              }
+            });
+            apiRes.on('end', resolve);
+          });
+          apiReq.on('error', reject);
+          apiReq.setTimeout(120000, () => apiReq.destroy(new Error('Timeout')));
+          apiReq.write(body);
+          apiReq.end();
+        });
+
+        success = true;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const msgText = String(err?.message || '').toLowerCase();
+        if (!/429|rate limit|unavailable|overloaded/.test(msgText)) break;
+      }
+    }
+
+    if (!success) {
+      const fallback = lastErr?.message || 'Error al obtener respuesta';
+      res.write(`data: ${JSON.stringify({ token: fallback })}\n\n`);
+    }
+
+    // Clean memory tags
+    const cleanReply = fullReply.replace(/\[GUARDAR:\w+:.+?\]/g, '').trim();
+    const memoryPattern = /\[GUARDAR:(\w+):(.+?)\]/g;
+    let match;
+    while ((match = memoryPattern.exec(fullReply)) !== null) {
+      saveMemory(match[1], match[2]);
+    }
+    if (cleanReply) saveConversationTurn(sid, msg, cleanReply);
+    autoDetectMemories(msg);
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ token: 'Error: ' + err.message })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+});
+
+// GET /api/chat/history - Load conversation history for a session
+router.get('/history', (req, res) => {
+  const sid = req.query.sessionId || 'default';
+  const db = readConversations();
+  const turns = Array.isArray(db.sessions?.[sid]) ? db.sessions[sid] : [];
+  res.json({ turns: turns.slice(-40) });
+});
+
+// GET /api/chat/sessions - List all session IDs with last message
+router.get('/sessions', (req, res) => {
+  const db = readConversations();
+  const sessions = Object.entries(db.sessions || {}).map(([id, turns]) => {
+    const last = Array.isArray(turns) && turns.length ? turns[turns.length - 1] : null;
+    return {
+      id,
+      lastMessage: last?.user || '',
+      lastReply: last?.assistant || '',
+      lastAt: last?.at || '',
+      turns: Array.isArray(turns) ? turns.length : 0,
+    };
+  }).sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''));
+  res.json({ sessions });
 });
 
 // POST /api/chat/tts - Convierte texto a voz con ElevenLabs

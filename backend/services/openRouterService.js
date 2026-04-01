@@ -86,4 +86,44 @@ async function chat(systemPrompt, userMessage, options = {}) {
   });
 }
 
-module.exports = { chat };
+module.exports = { chat, chatStream };
+
+function chatStream(systemPrompt, userMessage, options = {}) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY no configurada en .env');
+
+  const model = options.model || process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
+  const userContent = options.imageUrl
+    ? [
+      { type: 'text', text: userMessage },
+      { type: 'image_url', image_url: { url: options.imageUrl } },
+    ]
+    : userMessage;
+
+  const body = JSON.stringify({
+    model,
+    max_tokens: options.maxTokens,
+    temperature: options.temperature,
+    stream: true,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+  });
+
+  const url = new URL(OPENROUTER_API_URL);
+  const reqOptions = {
+    hostname: url.hostname,
+    path: url.pathname,
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://arey.onrender.com',
+      'X-Title': 'Arey IA',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  };
+
+  return { body, reqOptions };
+}
