@@ -2,13 +2,22 @@
   "facts": [
     "El usuario se llama Andriy",
     "El usuario tiene 18 años",
-    "El usuario se llama y"
+    "El usuario se llama y",
+    "Qwen activo",
+    "le gusta programar",
+    "menú restaurante cantón",
+    "color favorito:verde",
+    "El usuario dice que es andry",
+    "El usuario dice que es andriy"
   ],
   "preferences": [
     "Le gusta el futbol",
     "no le gusta el futbol",
     "Le gusta fut",
-    "No le gusta el fut"
+    "No le gusta el fut",
+    "restaurante cantón",
+    "Su favorito es verde",
+    "permiso reprogramación explícita"
   ],
   "personality_notes": []
 }

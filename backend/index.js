@@ -7,13 +7,16 @@ const n8nRoutes = require('./routes/n8nRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const memoryRoutes = require('./routes/memoryRoutes');
+const calendarRoutes = require('./routes/calendarRoutes');
+const integrationRoutes = require('./routes/integrationRoutes');
+const discordService = require('./services/discordService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 
 // Servir manifest.json y sw.js en la raíz
@@ -32,6 +35,8 @@ app.use('/api/n8n', n8nRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/memory', memoryRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/integrations', integrationRoutes);
 
 // Servir icons
 app.use('/icons', express.static(path.join(__dirname, 'icons')));
@@ -44,4 +49,5 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n🤖 Asistente Virtual IA corriendo en http://localhost:${PORT}`);
   console.log(`   n8n: ${process.env.N8N_BASE_URL}`);
+  discordService.initDiscord(`http://localhost:${PORT}`);
 });

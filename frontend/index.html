@@ -197,6 +197,42 @@
     .input-area button:hover { opacity: 0.86; }
     .input-area button:disabled { opacity: 0.45; cursor: not-allowed; }
 
+    .input-area .img-btn {
+      background: #2b2b2b;
+      color: #f3f4f6;
+      border: 1px solid #3a3a3a;
+      min-width: 100px;
+    }
+
+    .image-chip {
+      margin: 0 20px 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 12px;
+      color: #d1d5db;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      max-width: calc(100% - 40px);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .image-chip.active { display: inline-flex; }
+
+    .image-chip button {
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+    }
+
     .call-view {
       flex: 1;
       display: none;
@@ -378,7 +414,14 @@
     <span></span><span></span><span></span>
   </div>
 
+  <div class="image-chip" id="imageChip">
+    <span id="imageChipText"></span>
+    <button type="button" onclick="clearImageSelection()" aria-label="Quitar imagen">x</button>
+  </div>
+
   <div class="input-area" id="inputArea">
+    <input type="file" id="imageInput" accept="image/*" style="display:none">
+    <button type="button" class="img-btn" id="imageBtn" onclick="pickImage()">Imagen</button>
     <input type="text" id="userInput" placeholder="Escribe tu mensaje..." autocomplete="off">
     <button id="sendBtn" onclick="sendMessage()">Enviar</button>
   </div>
@@ -414,6 +457,10 @@
     const inputArea = document.getElementById('inputArea');
     const typingEl = document.getElementById('typing');
     const input = document.getElementById('userInput');
+    const imageInput = document.getElementById('imageInput');
+    const imageBtn = document.getElementById('imageBtn');
+    const imageChip = document.getElementById('imageChip');
+    const imageChipText = document.getElementById('imageChipText');
     const sendBtn = document.getElementById('sendBtn');
     const callAvatar = document.getElementById('callAvatar');
     const callStatus = document.getElementById('callStatus');
@@ -435,6 +482,8 @@
     let isProcessing = false;
     let currentAudio = null;
     let useElevenLabs = true; // true = ElevenLabs, false = navegador
+    let selectedImageDataUrl = '';
+    let selectedImageName = '';
 
     // ===== MODE SWITCH =====
     function switchMode(mode) {
@@ -462,21 +511,72 @@
 
     async function sendMessage() {
       const text = input.value.trim();
-      if (!text) return;
+      const hasImage = Boolean(selectedImageDataUrl);
+      if (!text && !hasImage) return;
 
-      addMessage(text, 'user');
+      const payloadText = text || 'Describe esta imagen.';
+      const userBubbleText = hasImage
+        ? `${text || 'Analiza esta imagen'}\n[Imagen adjunta: ${selectedImageName || 'archivo'}]`
+        : payloadText;
+
+      addMessage(userBubbleText, 'user');
       input.value = '';
       sendBtn.disabled = true;
+      imageBtn.disabled = true;
       typingEl.classList.add('active');
       scrollToBottom();
 
-      const reply = await sendToAI(text);
+      const reply = await sendToAI(payloadText, 'chat', selectedImageDataUrl || null);
       typingEl.classList.remove('active');
       addMessage(reply, 'bot');
 
       sendBtn.disabled = false;
+      imageBtn.disabled = false;
+      clearImageSelection();
       input.focus();
     }
+
+    function pickImage() {
+      imageInput.click();
+    }
+
+    function clearImageSelection() {
+      selectedImageDataUrl = '';
+      selectedImageName = '';
+      imageInput.value = '';
+      imageChipText.textContent = '';
+      imageChip.classList.remove('active');
+    }
+
+    imageInput.addEventListener('change', () => {
+      const file = imageInput.files?.[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        alert('Selecciona un archivo de imagen valido.');
+        clearImageSelection();
+        return;
+      }
+
+      if (file.size > 6 * 1024 * 1024) {
+        alert('La imagen es muy grande. Usa una menor a 6MB.');
+        clearImageSelection();
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        selectedImageDataUrl = String(reader.result || '');
+        selectedImageName = file.name || 'imagen';
+        imageChipText.textContent = `Imagen: ${selectedImageName}`;
+        imageChip.classList.add('active');
+      };
+      reader.onerror = () => {
+        alert('No pude leer la imagen seleccionada.');
+        clearImageSelection();
+      };
+      reader.readAsDataURL(file);
+    });
 
     function formatMessage(text) {
       // Escape HTML first
@@ -518,12 +618,12 @@
     }
 
     // ===== SHARED AI CALL =====
-    async function sendToAI(text) {
+    async function sendToAI(text, mode = 'chat', imageDataUrl = null) {
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text, sessionId: SESSION_ID }),
+          body: JSON.stringify({ message: text, sessionId: SESSION_ID, mode, imageDataUrl }),
         });
         const data = await res.json();
         return data.reply || 'Lo siento, no pude procesar tu mensaje.';
@@ -677,7 +777,7 @@
 
       if (recognition) recognition.abort();
 
-      const reply = await sendToAI(text);
+      const reply = await sendToAI(text, 'call');
 
       // También agregar al chat
       addMessage(text, 'user');

@@ -1,2 +1,6 @@
 node_modules/
 .env
+integrations.json
+conversationMemory.json
+selfRules.json
+.backups/
