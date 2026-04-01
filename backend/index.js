@@ -46,6 +46,22 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', n8nUrl: process.env.N8N_BASE_URL });
 });
 
+// Diagnostico Discord
+app.get('/debug/discord', (req, res) => {
+  const status = discordService.getStatus();
+  res.json({
+    discordStatus: status,
+    hasToken: Boolean(process.env.DISCORD_BOT_TOKEN),
+    tokenLength: (process.env.DISCORD_BOT_TOKEN || '').length,
+    hasClientId: Boolean(process.env.DISCORD_CLIENT_ID),
+    clientId: process.env.DISCORD_CLIENT_ID || 'vacio',
+    hasOwnerId: Boolean(process.env.DISCORD_OWNER_ID),
+    ownerId: process.env.DISCORD_OWNER_ID || 'vacio',
+    configured: discordService.isDiscordConfigured(),
+    envKeys: Object.keys(process.env).filter(k => k.startsWith('DISCORD')),
+  });
+});
+
 app.listen(PORT, () => {
   const renderUrl = process.env.RENDER_EXTERNAL_URL;
   const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
